@@ -1,23 +1,26 @@
 #include <math.h>
 
+
 // GLobal constants
-#define L 0.0f // inductance
-#define R 0.0f // resistance
-#define k 0.0f // equivalent "elasticity"
-#define lambda 0.0f // decay rate
+#define L 10.0e-3f // inductance
+#define R 1.0f // resistance
+#define k 1.0f/25.0e-6f // equivalent "elasticity"
+#define lambda 1.0e-4f // decay rate
 #define f_s 20000.0f // sampling frequency
 #define T_s 1.0f/f_s // sampling time
-#define eta 0.1f*1/300.0f // define eta as a fraction of signal frequency
+#define eta 0.1f*300.0f // define eta as a fraction of signal frequency
 
 // Define uncertainties
-#define Lplus 1.1f*L;
-#define Lminus 0.9f*L;
-#define Rplus 1.1f*R;
-#define Rminus 0.9f*R;
-#define kplus 1.1f*k;
-#define kminus 0.9f*k;
+#define Lplus 1.1f * L
+#define Lminus 0.9f * L
+#define Rplus 1.1f * R
+#define Rminus 0.9f * R
+#define kplus 1.1f * k
+#define kminus 0.9f * k
 
-#define d (Lplus - Lminus)/Lminus; // d according to (14)
+#define d (Lplus - Lminus) / Lminus // d according to (14)
+
+
 
 
 // Global variables
@@ -29,6 +32,7 @@ static float q; // Measured charge
 static float d_i_star; // First-order derivative of reference current
 static float d_qtilde; // First-order derivatide of tilde measured charge
 static float d_itilde; // First-order derivative of
+static float i_star;
 
 // Function declarations
 void update_i();
@@ -66,7 +70,7 @@ void calculate_u()
 
     // Calculate control effort acc. to (4)
 
-    u =  -L*(K*epsilon-(R/L*i+k/L*q)-d_i_star+lambda*d_qtilde);
+    u =  -L*(K_big*epsilon-(R/L*i+k/L*q)-d_i_star+lambda*d_qtilde);
 
 }
 
@@ -106,10 +110,10 @@ void update_q()
     integrator += i * T_s; 
 
     // check for overflow
-    if (integrator > 1000.0f){
+    if (integrator > 10.0f){
         integrator = 0.0f;
     }
-    if (integrator < -1000.0f){
+    if (integrator < -10.0f){
         integrator = 0.0f;
     }
 
@@ -137,12 +141,12 @@ void update_d_i_star()
     // i_star_old: previous value for the reference current
     
     static float angle = 0.0f;
-    static float i_star = 0.0f;
+
     static float i_star_old = 0.0f;
 
     // update angle step
 
-    angle += T_s*1884.95559f; // calculated for 2*pi*f*t with 300Hz
+    angle = angle+ T_s*11*376.991118f; // calculated for 2*pi*f*t with 660Hz
 
     // handle overflow (angle>2*pi)
     if (angle>6.28318531f)
@@ -154,7 +158,7 @@ void update_d_i_star()
     i_star_old = i_star;
 
     // calculate reference current
-    i_star = sinf(angle);
+    i_star = 0.1f*cos(angle);
 
     // calculate derivative output
     d_i_star = (i_star - i_star_old) / T_s;
@@ -256,7 +260,7 @@ void update_epsilon()
 void update_K_big()
 {
 
-    // This function updates the value of epsilon(s) 
+    // This function updates the value of K_big
     //
     // OUTPUTS
     // K_big
@@ -269,8 +273,9 @@ void update_K_big()
     // INTERNAL VARIABLES
     // 
     // Fs
+    float Fs = 0.0f;
 
-    Fs= fabsf((Rplus*Lplus-Rminus*Lminus))/Lminus/Lminus*fabs(i) + fabsf((kplus*Lplus-kminus*Lminus))/Lminus/Lminus*fabs(q);
+    Fs= fabs((Rplus*Lplus-Rminus*Lminus))/Lminus/Lminus*fabs(i) + fabs((kplus*Lplus-kminus*Lminus))/Lminus/Lminus*fabs(q);
 
-    K_big = 1/(1-d) * (eta + Fs + d * fabsf(-R/L*i - k/L*q - d_i_star + lambda*d_i_tilde));
+    K_big = 1/(1-d) * (eta + Fs + d * fabs(-R/L * i - k/L * q - d_i_star + lambda * d_itilde));
 }
