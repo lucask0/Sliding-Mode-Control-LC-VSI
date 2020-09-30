@@ -1,51 +1,48 @@
+// @Authors: 
+//     - Bruno Peixoto
+//     - Lucas Koleff
+// https://www.overleaf.com/read/gcxtkqsndkkq
+// @Date: 30/09/2020
 #include <math.h>
 
-
-// GLobal constants
-#define L 10.0e-3f // inductance
-#define R 1.0f // resistance
+// Global constants
+#define L 10.0e-3f      // inductance
+#define R 1.0f          // resistance
 #define k 1.0f/25.0e-6f // equivalent "elasticity"
-#define lambda 1.0e-4f // decay rate
-#define f_s 20000.0f // sampling frequency
-#define T_s 1.0f/f_s // sampling time
+#define lambda 1.0e-4f  // decay rate
+#define f_s 20000.0f    // sampling frequency
+#define T_s 1.0f/f_s    // sampling time
 #define eta 0.1f*300.0f // define eta as a fraction of signal frequency
 
+#define FLOOR_PREC 0.1f
+#define CEIL_PREC 0.1f
+
 // Define uncertainties
-#define Lplus 1.1f * L
-#define Lminus 0.9f * L
-#define Rplus 1.1f * R
-#define Rminus 0.9f * R
-#define kplus 1.1f * k
-#define kminus 0.9f * k
+#define L_PLUS (1 + CEIL_PREC) * L
+#define L_MINUS (1 - FLOOR_PREC) * L
+#define R_PLUS (1 + CEIL_PREC) * R
+#define R_MINUS (1 - FLOOR_PREC) * R
+#define k_PLUS (1 + CEIL_PREC) * k
+#define k_MINUS (1 - FLOOR_PREC) * k
 
-#define d (Lplus - Lminus) / Lminus // d according to (14)
+#define PI 3.1415926535
 
-
-
+// d according to (14)
+#define DELTA (L_PLUS - L_MINUS) / L_MINUS
 
 // Global variables
-static float u; // Control effort
-static float K_big; // Gain
-static float epsilon; // Sliding function
-static float i; // Measured current
-static float q; // Measured charge
-static float d_i_star; // First-order derivative of reference current
-static float d_qtilde; // First-order derivatide of tilde measured charge
-static float d_itilde; // First-order derivative of
+static float u;             // Control effort
+static float K;             // Gain
+static float epsilon;       // Smoothstep function
+static float i;             // Measured current
+static float q;             // Measured charge
+static float d_i_star;      // First-order derivative of reference current
+static float d_qtilde;      // First-order derivative of tilde measured charge
+static float d_itilde;      // First-order derivative of
 static float i_star;
-
-// Function declarations
-void update_i();
-void update_q();
-void update_d_i_star();
-void update_d_qtilde();
-void update_epsilon();
-void update_d_itilde();
-void update_K_big();
 
 
 // Function implementations
-
 void calculate_u()
 {
     // This function calculates the new value of the control effort
@@ -56,7 +53,7 @@ void calculate_u()
     //
     // INPUTS
     // L, R, k, lambda : constants
-    // K_big, epsilon, i, q, d_i, d_qtilde : to be calculated
+    // K, epsilon, i, q, d_i, d_qtilde : to be calculated
 
     // Update necessary variables
     // Execution order matters!
@@ -66,12 +63,11 @@ void calculate_u()
     update_d_qtilde();
     update_epsilon();
     update_d_itilde();
-    update_K_big();
+    update_K();
 
     // Calculate control effort acc. to (4)
-
-    u =  -L*(K_big*epsilon-(R/L*i+k/L*q)-d_i_star+lambda*d_qtilde);
-
+    s_r = -d_i_star + lambda*d_qtilde;
+    u =  -L*(-(R/L*i+k/L*q) + s_r + K*epsilon);
 }
 
 void update_i()
@@ -141,12 +137,10 @@ void update_d_i_star()
     // i_star_old: previous value for the reference current
     
     static float angle = 0.0f;
-
     static float i_star_old = 0.0f;
 
     // update angle step
-
-    angle = angle+ T_s*11*376.991118f; // calculated for 2*pi*f*t with 660Hz
+    angle = angle + T_s*11*376.991118f; // calculated for 2*pi*f*t with 660Hz
 
     // handle overflow (angle>2*pi)
     if (angle>6.28318531f)
@@ -218,8 +212,6 @@ void update_d_itilde()
 
 }
 
-
-
 void update_epsilon()
 {
     // This function updates the value of epsilon(s) 
@@ -242,7 +234,6 @@ void update_epsilon()
     s = i + lambda * q;
 
     // apply saturation function on s to calculate epsilon
-
     if (s>1)
     {
         epsilon = 1;
@@ -257,25 +248,25 @@ void update_epsilon()
 
 
 
-void update_K_big()
+void update_K()
 {
 
-    // This function updates the value of K_big
+    // This function updates the value of K
     //
     // OUTPUTS
-    // K_big
+    // K
     //
     // INPUTS
     //
     // q, i, eta, Fs, d, R, L, k, d_i_star, lambda, d_i_tilde
-    // Rplus, Rminus, Lplus, Lminus, kplus, kminus
+    // R_PLUS, R_MINUS, L_PLUS, L_MINUS, k_PLUS, k_MINUS
     //
     // INTERNAL VARIABLES
     // 
     // Fs
     float Fs = 0.0f;
 
-    Fs= fabs((Rplus*Lplus-Rminus*Lminus))/Lminus/Lminus*fabs(i) + fabs((kplus*Lplus-kminus*Lminus))/Lminus/Lminus*fabs(q);
+    Fs= fabs((R_PLUS*L_PLUS-R_MINUS*L_MINUS))/L_MINUS/L_MINUS*fabs(i) + fabs((k_PLUS*L_PLUS-k_MINUS*L_MINUS))/L_MINUS/L_MINUS*fabs(q);
 
-    K_big = 1/(1-d) * (eta + Fs + d * fabs(-R/L * i - k/L * q - d_i_star + lambda * d_itilde));
+    K = 1/(1-d) * (eta + Fs + DELTA * fabs(-R/L * i - k/L * q - d_i_star + lambda * d_itilde));
 }
